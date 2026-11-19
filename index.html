@@ -1691,17 +1691,25 @@
         cloudPollHandle: null
       };
 
-      function getSavedFirebaseConfig() {
-        try {
-          const raw = localStorage.getItem(FB_CFG_KEY);
-          if (!raw) return null;
-          const cfg = JSON.parse(raw);
-          return cfg && cfg.databaseURL ? cfg : null;
-        } catch (e) {
-          return null;
-        }
-      }
+      const DEFAULT_FIREBASE_CONFIG = {
+  databaseURL: "https://qriosity-d81bd-default-rtdb.firebaseio.com",
+  projectId: "qriosity-d81bd",
+  authDomain: "qriosity-d81bd.firebaseapp.com",
+  appId: "1:853050207523:web:5339ce45c153f4f2656616",
+  apiKey: ""
+};
 
+function getSavedFirebaseConfig() {
+  try {
+    const raw = localStorage.getItem(FB_CFG_KEY);
+    if (!raw) return DEFAULT_FIREBASE_CONFIG;
+    const cfg = JSON.parse(raw);
+    return cfg && cfg.databaseURL ? cfg : DEFAULT_FIREBASE_CONFIG;
+  } catch (e) {
+    return DEFAULT_FIREBASE_CONFIG;
+  }
+}
+    
       function updateSyncStatusUI() {
         const dot = document.getElementById("nav-sync-dot");
         const label = document.getElementById("nav-sync-label");
