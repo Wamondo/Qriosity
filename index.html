@@ -1,0 +1,1714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Qriosity Live — Real-Time Classroom Quiz & Sync</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          colors: {
+            board: {
+              950: '#0b252c',
+              900: '#10353e',
+              800: '#174854',
+              700: '#1e5b6a',
+              600: '#267588',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #0b252c;
+      background-image:
+        radial-gradient(circle at 15% 20%, rgba(38, 117, 136, 0.25) 0%, transparent 45%),
+        radial-gradient(circle at 85% 80%, rgba(16, 185, 129, 0.14) 0%, transparent 45%);
+      min-height: 100vh;
+    }
+    .chalk-grid {
+      background-size: 32px 32px;
+      background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    }
+    .option-card {
+      transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.15s ease;
+    }
+    .option-card:hover:not(:disabled) {
+      transform: translateY(-2px);
+    }
+    .option-card:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+    @keyframes pulseRing {
+      0% { transform: scale(0.95); opacity: 0.7; }
+      70% { transform: scale(1.15); opacity: 0; }
+      100% { transform: scale(1.15); opacity: 0; }
+    }
+    .pulse-ring::before {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: inherit;
+      border: 2px solid #34d399;
+      animation: pulseRing 2s infinite;
+    }
+  </style>
+</head>
+<body class="text-slate-100 chalk-grid antialiased selection:bg-teal-400 selection:text-board-950">
+
+  <!-- Toast / Custom Notification Banner (Replaces alert/confirm) -->
+  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- Custom Confirmation Modal -->
+  <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div class="bg-white text-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <h3 id="confirm-title" class="font-display font-bold text-lg">Confirm Action</h3>
+      </div>
+      <p id="confirm-message" class="text-slate-600 text-sm mb-6">Are you sure you want to proceed?</p>
+      <div class="flex justify-end gap-3">
+        <button id="confirm-cancel" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition">Cancel</button>
+        <button id="confirm-ok" class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-board-800 text-white hover:bg-board-700 transition">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-white/10 bg-board-950/80 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <!-- Brand -->
+      <div class="flex items-center gap-3 cursor-pointer" onclick="window.appNav('landing')">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center text-board-950 shadow-lg shadow-teal-500/20">
+          <i class="fa-solid fa-flask-vial text-lg"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-display font-extrabold text-xl tracking-tight text-white">Qriosity<span class="text-teal-400">.live</span></span>
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-400/30">Live Sync</span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">Interactive Classroom Assessment Board</p>
+        </div>
+      </div>
+
+      <!-- Connection Status & Auth Controls -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <div id="sync-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-slate-300">
+          <span id="sync-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span id="sync-text">Connecting...</span>
+        </div>
+
+        <button id="google-signin-btn" onclick="window.signInWithGoogle()" class="hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-semibold text-white transition">
+          <i class="fa-brands fa-google text-teal-300"></i>
+          <span id="auth-user-label">Teacher Sign In</span>
+        </button>
+
+        <button onclick="window.appNav('landing')" id="home-btn" class="hidden px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition">
+          <i class="fa-solid fa-house mr-1"></i> Switch Role
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+
+    <!-- ==================== VIEW 1: LANDING / ROLE SELECTION ==================== -->
+    <section id="view-landing" class="space-y-8">
+      <!-- Hero Banner -->
+      <div class="text-center max-w-3xl mx-auto space-y-4">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-400/10 border border-teal-400/25 text-teal-300 text-xs font-semibold">
+          <i class="fa-solid fa-bolt"></i> Sub-Second Classroom Sync &bull; Auto-Marking &bull; Live Ranking
+        </div>
+        <h1 class="font-display font-extrabold text-3xl sm:text-5xl text-white leading-tight">
+          Turn Every Lesson Into a <span class="text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-emerald-400">Live Challenge</span>
+        </h1>
+        <p class="text-slate-300 text-sm sm:text-base max-w-2xl mx-auto">
+          Push questions straight to learners' phones or tablets in real time. Watch responses arrive live, auto-grade answers instantly, and rank top performers on the classroom board.
+        </p>
+      </div>
+
+      <!-- Dual Role Entry Cards -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl mx-auto">
+        <!-- Learner Join Card -->
+        <div class="bg-white text-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200/80 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-5">
+              <span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase tracking-wider">
+                <i class="fa-solid fa-user-graduate mr-1"></i> Learner View
+              </span>
+              <span class="text-xs font-medium text-slate-400">No account needed</span>
+            </div>
+            <h2 class="font-display font-extrabold text-2xl text-slate-900 mb-2">Join a Live Session</h2>
+            <p class="text-slate-500 text-sm mb-6">Enter the 6-character Room PIN displayed on your teacher's screen and your name to enter the classroom lobby.</p>
+
+            <form id="learner-join-form" onsubmit="window.handleLearnerJoin(event)" class="space-y-4">
+              <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">6-Character Room PIN</label>
+                <input
+                  id="join-pin-input"
+                  type="text"
+                  maxlength="6"
+                  placeholder="e.g. CHEM24"
+                  required
+                  class="w-full px-4 py-3.5 rounded-2xl bg-slate-100 border-2 border-slate-200 focus:border-teal-600 focus:bg-white focus:outline-none font-display font-extrabold text-2xl tracking-[0.25em] text-center uppercase text-board-900 transition"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Your Name / Admission No.</label>
+                <input
+                  id="join-name-input"
+                  type="text"
+                  maxlength="28"
+                  placeholder="e.g. Allan M. (654)"
+                  required
+                  class="w-full px-4 py-3 rounded-2xl bg-slate-100 border-2 border-slate-200 focus:border-teal-600 focus:bg-white focus:outline-none font-semibold text-slate-800 transition"
+                />
+              </div>
+              <button
+                type="submit"
+                class="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-display font-bold text-base shadow-lg shadow-emerald-600/25 transition flex items-center justify-center gap-2"
+              >
+                <span>Enter Live Classroom</span>
+                <i class="fa-solid fa-arrow-right"></i>
+              </button>
+            </form>
+          </div>
+
+          <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span><i class="fa-solid fa-mobile-screen-button text-teal-600 mr-1"></i> Works on phone, tablet & PC</span>
+            <button type="button" onclick="window.fillDemoPin()" id="quick-fill-pin-btn" class="hidden text-teal-700 font-bold hover:underline">
+              Use active room PIN
+            </button>
+          </div>
+        </div>
+
+        <!-- Teacher Host Card -->
+        <div class="bg-board-900/90 backdrop-blur-md text-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-teal-400/25 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-5">
+              <span class="px-3 py-1 rounded-full bg-teal-400/20 text-teal-300 border border-teal-400/30 text-xs font-bold uppercase tracking-wider">
+                <i class="fa-solid fa-chalkboard-user mr-1"></i> Teacher Host
+              </span>
+              <span class="text-xs font-medium text-teal-300/80">Live Board Control</span>
+            </div>
+            <h2 class="font-display font-extrabold text-2xl text-white mb-2">Host & Synchronize a Quiz</h2>
+            <p class="text-slate-300 text-sm mb-6">Launch a ready-made subject challenge or build your own custom questions, push them live, and track class mastery in real time.</p>
+
+            <!-- Quick Launch Presets -->
+            <div class="space-y-3 mb-6">
+              <p class="text-xs font-bold uppercase tracking-wider text-teal-300">Instant Launch Sample Quizzes</p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button onclick="window.launchPresetQuiz('chemistry')" class="p-3.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition group">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="w-8 h-8 rounded-lg bg-teal-500/20 text-teal-300 flex items-center justify-center"><i class="fa-solid fa-atom"></i></span>
+                    <span class="text-[11px] font-semibold text-slate-400 group-hover:text-teal-300">4 Qs &rarr;</span>
+                  </div>
+                  <p class="font-bold text-sm text-white">ChemQuest: Stoichiometry</p>
+                  <p class="text-xs text-slate-400">Moles, limiting reactants & equations</p>
+                </button>
+
+                <button onclick="window.launchPresetQuiz('mathematics')" class="p-3.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition group">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-300 flex items-center justify-center"><i class="fa-solid fa-square-root-variable"></i></span>
+                    <span class="text-[11px] font-semibold text-slate-400 group-hover:text-blue-300">4 Qs &rarr;</span>
+                  </div>
+                  <p class="font-bold text-sm text-white">Math Mastery: Algebra & Trig</p>
+                  <p class="text-xs text-slate-400">Quadratics, gradients & ratios</p>
+                </button>
+
+                <button onclick="window.launchPresetQuiz('agriculture')" class="p-3.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition group">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center"><i class="fa-solid fa-seedling"></i></span>
+                    <span class="text-[11px] font-semibold text-slate-400 group-hover:text-emerald-300">3 Qs &rarr;</span>
+                  </div>
+                  <p class="font-bold text-sm text-white">Agriculture & Soil Science</p>
+                  <p class="text-xs text-slate-400">Soil pH, crop rotation & nutrients</p>
+                </button>
+
+                <button onclick="window.launchPresetQuiz('pretech')" class="p-3.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-left transition group">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center"><i class="fa-solid fa-compass-drafting"></i></span>
+                    <span class="text-[11px] font-semibold text-slate-400 group-hover:text-amber-300">3 Qs &rarr;</span>
+                  </div>
+                  <p class="font-bold text-sm text-white">Pre-Technical Studies</p>
+                  <p class="text-xs text-slate-400">Workshop safety, drawing & tools</p>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <button
+              onclick="window.openQuizBuilder()"
+              class="w-full py-4 rounded-2xl bg-white text-board-950 hover:bg-teal-50 font-display font-bold text-base shadow-lg transition flex items-center justify-center gap-2"
+            >
+              <i class="fa-solid fa-plus-circle text-teal-600"></i>
+              <span>Create Custom Quiz & Start Room</span>
+            </button>
+            <p class="text-center text-xs text-slate-400">
+              Tip: Open a second browser tab or phone to join with your PIN and test live sync!
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 2: TEACHER QUIZ BUILDER ==================== -->
+    <section id="view-builder" class="hidden max-w-4xl mx-auto space-y-6">
+      <div class="bg-white text-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200">
+        <div class="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-slate-200">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-wider text-teal-600">Teacher Studio</span>
+            <h2 class="font-display font-extrabold text-2xl text-slate-900">Build Your Live Quiz</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="window.appNav('landing')" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition">
+              Cancel
+            </button>
+            <button onclick="window.saveAndLaunchCustomQuiz()" class="px-5 py-2.5 rounded-xl bg-board-800 hover:bg-board-700 text-white font-bold text-sm shadow-md transition flex items-center gap-2">
+              <i class="fa-solid fa-tower-broadcast text-teal-300"></i>
+              <span>Launch Live Room</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quiz Metadata -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 my-6">
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Quiz / Lesson Title</label>
+            <input id="builder-title" type="text" value="Form 3 Chemistry: Moles & Equations" class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-300 focus:border-teal-600 focus:outline-none font-semibold text-slate-900" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Subject Tag</label>
+            <select id="builder-subject" class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-300 focus:border-teal-600 focus:outline-none font-semibold text-slate-900">
+              <option value="Chemistry">Chemistry</option>
+              <option value="Mathematics">Mathematics</option>
+              <option value="Biology">Biology</option>
+              <option value="Physics">Physics</option>
+              <option value="Agriculture">Agriculture</option>
+              <option value="Pre-Technical Studies">Pre-Technical Studies</option>
+              <option value="General">General Knowledge</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Questions List -->
+        <div id="builder-questions-list" class="space-y-5"></div>
+
+        <!-- Add Question Button -->
+        <button onclick="window.addBuilderQuestion()" class="mt-6 w-full py-3.5 rounded-2xl border-2 border-dashed border-slate-300 hover:border-teal-600 hover:bg-teal-50/50 text-slate-600 hover:text-teal-700 font-bold text-sm transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-plus"></i> Add Another Question
+        </button>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 3: TEACHER HOST LIVE DASHBOARD ==================== -->
+    <section id="view-teacher-host" class="hidden space-y-6">
+      <!-- Top Control & PIN Header -->
+      <div class="bg-board-900/95 border border-teal-400/30 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-6">
+        <!-- Room PIN Display -->
+        <div class="flex flex-wrap items-center gap-4 sm:gap-6">
+          <div class="bg-white text-board-950 rounded-2xl px-5 py-3 shadow-inner flex items-center gap-4">
+            <div>
+              <span class="block text-[10px] font-extrabold uppercase tracking-widest text-teal-700">Join Room PIN</span>
+              <span id="host-room-pin" class="font-display font-extrabold text-3xl sm:text-4xl tracking-[0.2em] text-board-950">------</span>
+            </div>
+            <button onclick="window.copyRoomPin()" title="Copy PIN" class="p-2.5 rounded-xl bg-slate-100 hover:bg-teal-100 text-board-800 transition">
+              <i class="fa-regular fa-copy text-lg"></i>
+            </button>
+          </div>
+
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span id="host-subject-badge" class="px-2.5 py-0.5 rounded-full bg-teal-400/20 text-teal-300 text-xs font-bold">Subject</span>
+              <span id="host-status-pill" class="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-xs font-bold">Lobby Open</span>
+            </div>
+            <h2 id="host-quiz-title" class="font-display font-extrabold text-xl sm:text-2xl text-white">Quiz Title</h2>
+            <p class="text-xs text-slate-300 mt-0.5">
+              <span id="host-joined-count" class="font-bold text-emerald-400 text-sm">0</span> learners connected in real time
+            </p>
+          </div>
+        </div>
+
+        <!-- Primary Teacher Action Controls -->
+        <div class="flex flex-wrap items-center gap-3">
+          <button id="host-push-btn" onclick="window.teacherPushNext()" class="flex-1 sm:flex-initial px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-600 text-board-950 font-display font-extrabold text-sm sm:text-base shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-paper-plane"></i>
+            <span id="host-push-label">Push Question 1 to Learners</span>
+          </button>
+
+          <button id="host-reveal-btn" onclick="window.teacherRevealAnswer()" class="hidden px-4 py-3.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-board-950 font-bold text-sm transition flex items-center gap-2">
+            <i class="fa-solid fa-eye"></i>
+            <span>End & Reveal</span>
+          </button>
+
+          <button onclick="window.exportResultsCSV()" class="px-4 py-3.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold text-sm transition flex items-center gap-2" title="Download CSV Report">
+            <i class="fa-solid fa-file-csv text-teal-300"></i>
+            <span class="hidden sm:inline">Export CSV</span>
+          </button>
+
+          <button onclick="window.confirmEndSession()" class="px-3.5 py-3.5 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/30 text-rose-200 font-semibold text-sm transition" title="Close Room">
+            <i class="fa-solid fa-power-off"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Host Grid: Live Question Stage + Analytics + Leaderboard -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Left 8 Columns: Active Question Board & Live Response Breakdown -->
+        <div class="lg:col-span-8 space-y-6">
+          <!-- Stage Card -->
+          <div class="bg-white text-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200">
+            <!-- State A: Waiting in Lobby -->
+            <div id="host-stage-lobby" class="text-center py-8 space-y-4">
+              <div class="w-16 h-16 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center text-3xl mx-auto relative pulse-ring">
+                <i class="fa-solid fa-users"></i>
+              </div>
+              <h3 class="font-display font-extrabold text-2xl text-slate-900">Waiting for Learners to Join</h3>
+              <p class="text-slate-500 text-sm max-w-md mx-auto">
+                Ask students to open this app and enter PIN <span id="lobby-inline-pin" class="font-extrabold text-board-800 bg-slate-100 px-2 py-0.5 rounded">------</span>. As soon as you click <strong>Push Question 1</strong>, every screen updates simultaneously.
+              </p>
+              <!-- Preview of Question 1 -->
+              <div class="mt-6 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-left max-w-xl mx-auto">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-teal-700">Up Next &bull; Question 1 of <span id="lobby-total-qs">0</span></span>
+                <p id="lobby-q1-preview" class="font-bold text-slate-800 mt-1">Loading question...</p>
+              </div>
+            </div>
+
+            <!-- State B: Active / Revealed Question -->
+            <div id="host-stage-question" class="hidden space-y-6">
+              <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                <div class="flex items-center gap-2.5">
+                  <span id="host-q-badge" class="px-3 py-1 rounded-xl bg-board-800 text-white font-display font-bold text-xs">Question 1 / 4</span>
+                  <span id="host-q-points" class="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 font-bold text-xs">1000 pts</span>
+                </div>
+                <div class="flex items-center gap-4">
+                  <div class="text-right">
+                    <span class="block text-[10px] font-bold uppercase text-slate-400">Responses</span>
+                    <span id="host-response-counter" class="font-display font-extrabold text-lg text-board-800">0 / 0</span>
+                  </div>
+                  <div class="w-12 h-12 rounded-2xl bg-board-900 text-white flex flex-col items-center justify-center">
+                    <span id="host-timer-display" class="font-display font-extrabold text-lg leading-none">20</span>
+                    <span class="text-[9px] uppercase text-teal-300">sec</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Question Prompt -->
+              <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200">
+                <p id="host-question-text" class="font-display font-bold text-xl sm:text-2xl text-slate-900 leading-snug"></p>
+              </div>
+
+              <!-- Live Option Distribution Bars (A, B, C, D) -->
+              <div id="host-options-analytics" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5"></div>
+            </div>
+
+            <!-- State C: Final Podium Summary -->
+            <div id="host-stage-finished" class="hidden text-center py-6 space-y-5">
+              <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-extrabold uppercase">
+                <i class="fa-solid fa-trophy"></i> Session Complete
+              </div>
+              <h3 class="font-display font-extrabold text-2xl sm:text-3xl text-slate-900">Final Classroom Podium</h3>
+              <p class="text-slate-500 text-sm">All responses have been automatically marked and ranked.</p>
+              <div id="host-podium-cards" class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 max-w-2xl mx-auto"></div>
+              <div class="pt-4 flex flex-wrap justify-center gap-3">
+                <button onclick="window.exportResultsCSV()" class="px-5 py-3 rounded-2xl bg-board-800 hover:bg-board-700 text-white font-bold text-sm transition flex items-center gap-2">
+                  <i class="fa-solid fa-download"></i> Download Full CSV Marksheet
+                </button>
+                <button onclick="window.appNav('landing')" class="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-sm transition">
+                  Back to Home
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Individual Learner Response Feed -->
+          <div class="bg-white text-slate-900 rounded-3xl p-6 shadow-xl border border-slate-200">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-display font-bold text-base text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-list-check text-teal-600"></i>
+                <span>Live Learner Activity & Submissions</span>
+              </h3>
+              <span id="host-accuracy-pill" class="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600">Class Accuracy: --%</span>
+            </div>
+            <div id="host-learner-responses-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto pr-1">
+              <p class="text-sm text-slate-400 col-span-full py-4 text-center">No learners have joined yet.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right 4 Columns: Live Ranked Leaderboard -->
+        <div class="lg:col-span-4">
+          <div class="bg-board-900/95 border border-white/15 rounded-3xl p-6 shadow-2xl sticky top-24">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-ranking-star text-amber-400 text-lg"></i>
+                <h3 class="font-display font-extrabold text-lg text-white">Live Leaderboard</h3>
+              </div>
+              <span class="text-[11px] font-semibold text-teal-300">Speed + Accuracy</span>
+            </div>
+            <div id="host-leaderboard-list" class="space-y-2.5 max-h-[520px] overflow-y-auto pr-1">
+              <div class="text-center py-10 text-slate-400 text-sm">
+                <i class="fa-solid fa-hourglass-start text-2xl mb-2 block text-teal-400/50"></i>
+                Learners will appear here as they join and score points.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== VIEW 4: LEARNER PLAYER VIEW ==================== -->
+    <section id="view-learner-player" class="hidden max-w-2xl mx-auto space-y-5">
+      <!-- Learner Top Status Bar -->
+      <div class="bg-board-900/95 border border-white/15 rounded-2xl px-4 py-3 flex items-center justify-between shadow-lg">
+        <div class="flex items-center gap-3">
+          <div id="player-avatar" class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-400 to-emerald-500 text-board-950 font-display font-extrabold flex items-center justify-center text-base">
+            A
+          </div>
+          <div>
+            <p id="player-name-display" class="font-bold text-sm text-white leading-tight">Learner</p>
+            <p class="text-xs text-teal-300">Room <span id="player-pin-display" class="font-bold">------</span></p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="text-right">
+            <span class="block text-[10px] uppercase tracking-wider text-slate-400">Your Score</span>
+            <span id="player-score-display" class="font-display font-extrabold text-lg text-emerald-400">0</span>
+          </div>
+          <div class="px-3 py-1.5 rounded-xl bg-white/10 text-center">
+            <span class="block text-[9px] uppercase text-slate-300">Rank</span>
+            <span id="player-rank-display" class="font-display font-extrabold text-sm text-amber-300">#-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Player State 1: Waiting Lobby -->
+      <div id="player-state-waiting" class="bg-white text-slate-900 rounded-3xl p-8 text-center shadow-2xl space-y-4">
+        <div class="w-16 h-16 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center text-3xl mx-auto animate-bounce">
+          <i class="fa-solid fa-satellite-dish"></i>
+        </div>
+        <span class="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold">You're In!</span>
+        <h2 class="font-display font-extrabold text-2xl text-slate-900">Waiting for Teacher to Push Question...</h2>
+        <p class="text-slate-500 text-sm max-w-md mx-auto">
+          Keep your screen open. As soon as your teacher pushes the next question on <strong id="player-quiz-title">the live board</strong>, it will appear right here automatically.
+        </p>
+      </div>
+
+      <!-- Player State 2: Active Question -->
+      <div id="player-state-question" class="hidden bg-white text-slate-900 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-5">
+        <div class="flex items-center justify-between">
+          <span id="player-q-number" class="px-3 py-1 rounded-xl bg-board-800 text-white font-display font-bold text-xs">Question 1</span>
+          <div class="flex items-center gap-2 px-3 py-1 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 font-display font-extrabold text-sm">
+            <i class="fa-regular fa-clock"></i>
+            <span id="player-timer">20s</span>
+          </div>
+        </div>
+
+        <!-- Timer Progress Bar -->
+        <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div id="player-timer-bar" class="h-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-all duration-500" style="width: 100%"></div>
+        </div>
+
+        <!-- Question Text -->
+        <div class="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200">
+          <p id="player-question-text" class="font-display font-bold text-lg sm:text-xl text-slate-900 leading-snug"></p>
+        </div>
+
+        <!-- 4 Interactive Color-Coded Answer Buttons -->
+        <div id="player-options-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5"></div>
+      </div>
+
+      <!-- Player State 3: Submitted / Feedback Screen -->
+      <div id="player-state-feedback" class="hidden bg-white text-slate-900 rounded-3xl p-8 text-center shadow-2xl space-y-4">
+        <div id="feedback-icon-box" class="w-20 h-20 rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-4xl mx-auto">
+          <i class="fa-solid fa-check"></i>
+        </div>
+        <h2 id="feedback-heading" class="font-display font-extrabold text-2xl text-slate-900">Answer Submitted!</h2>
+        <p id="feedback-subtext" class="text-slate-600 text-sm max-w-md mx-auto">Waiting for the rest of the class...</p>
+        <div class="inline-flex items-center gap-4 px-5 py-3 rounded-2xl bg-slate-50 border border-slate-200">
+          <div>
+            <span class="block text-[10px] font-bold uppercase text-slate-400">Points Earned</span>
+            <span id="feedback-points" class="font-display font-extrabold text-xl text-emerald-600">+0</span>
+          </div>
+          <div class="h-8 w-px bg-slate-200"></div>
+          <div>
+            <span class="block text-[10px] font-bold uppercase text-slate-400">Current Rank</span>
+            <span id="feedback-rank" class="font-display font-extrabold text-xl text-board-800">#1</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Player State 4: Session Finished -->
+      <div id="player-state-finished" class="hidden bg-white text-slate-900 rounded-3xl p-8 text-center shadow-2xl space-y-5">
+        <div class="w-20 h-20 rounded-3xl bg-amber-100 text-amber-600 flex items-center justify-center text-4xl mx-auto">
+          <i class="fa-solid fa-trophy"></i>
+        </div>
+        <h2 class="font-display font-extrabold text-2xl sm:text-3xl text-slate-900">Quiz Completed!</h2>
+        <p class="text-slate-500 text-sm">Great effort! Here is your final standing on the class leaderboard.</p>
+        <div class="grid grid-cols-2 gap-4 max-w-sm mx-auto">
+          <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <span class="block text-xs font-bold text-slate-400 uppercase">Final Score</span>
+            <span id="final-player-score" class="font-display font-extrabold text-2xl text-teal-700">0</span>
+          </div>
+          <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <span class="block text-xs font-bold text-slate-400 uppercase">Final Rank</span>
+            <span id="final-player-rank" class="font-display font-extrabold text-2xl text-amber-600">#1</span>
+          </div>
+        </div>
+        <button onclick="window.appNav('landing')" class="px-6 py-3 rounded-2xl bg-board-800 hover:bg-board-700 text-white font-bold text-sm transition">
+          Join Another Session
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Firebase & Application Logic -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import {
+      getAuth,
+      signInAnonymously,
+      signInWithCustomToken,
+      GoogleAuthProvider,
+      signInWithPopup,
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import {
+      getFirestore,
+      doc,
+      setDoc,
+      getDoc,
+      updateDoc,
+      onSnapshot,
+      collection,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // ==================== 1. FIREBASE INITIALIZATION ====================
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'qriosity-live-app';
+    let firebaseConfig = null;
+    try {
+      if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+        firebaseConfig = JSON.parse(__firebase_config);
+      }
+    } catch (e) {
+      console.error("Failed to parse __firebase_config:", e);
+    }
+
+    let app = null;
+    let auth = null;
+    let db = null;
+    let currentUser = null;
+
+    // Built-in Sample Quizzes (Kenyan & STEM curriculum inspired)
+    const PRESET_QUIZZES = {
+      chemistry: {
+        title: "ChemQuest: The Stoichiometry Challenge",
+        subject: "Chemistry",
+        questions: [
+          {
+            text: "Based on 2Al + 3Cl₂ → 2AlCl₃, determine the limiting reactant if 2.5g of Al reacts with 8.0g of Cl₂ (Al=27, Cl=35.5).",
+            options: ["Aluminum (Al)", "Chlorine (Cl₂)", "Aluminum Chloride (AlCl₃)", "Neither (Exact stoichiometric ratio)"],
+            correctIndex: 1,
+            timeLimit: 25,
+            points: 1000
+          },
+          {
+            text: "What is the molarity of a solution prepared by dissolving 4.0g of NaOH (RFM = 40) in 250 cm³ of distilled water?",
+            options: ["0.1 M", "0.25 M", "0.4 M", "1.0 M"],
+            correctIndex: 2,
+            timeLimit: 20,
+            points: 1000
+          },
+          {
+            text: "Which gas is produced when dilute hydrochloric acid reacts with zinc granules?",
+            options: ["Oxygen", "Carbon (IV) oxide", "Chlorine", "Hydrogen"],
+            correctIndex: 3,
+            timeLimit: 15,
+            points: 1000
+          },
+          {
+            text: "In the Haber process for manufacturing ammonia, which catalyst is used?",
+            options: ["Vanadium (V) oxide", "Finely divided Iron", "Platinum-Rhodium", "Manganese (IV) oxide"],
+            correctIndex: 1,
+            timeLimit: 15,
+            points: 1000
+          }
+        ]
+      },
+      mathematics: {
+        title: "Math Mastery: Algebra & Trigonometry",
+        subject: "Mathematics",
+        questions: [
+          {
+            text: "Solve for x in the quadratic equation: x² - 5x + 6 = 0",
+            options: ["x = 1 or x = 6", "x = -2 or x = -3", "x = 2 or x = 3", "x = -1 or x = 6"],
+            correctIndex: 2,
+            timeLimit: 20,
+            points: 1000
+          },
+          {
+            text: "A line passes through points A(2, 5) and B(6, 13). What is its gradient?",
+            options: ["2", "0.5", "4", "8"],
+            correctIndex: 0,
+            timeLimit: 20,
+            points: 1000
+          },
+          {
+            text: "If sin θ = 3/5 and θ is an acute angle, what is the value of cos θ?",
+            options: ["3/4", "4/5", "5/4", "5/3"],
+            correctIndex: 1,
+            timeLimit: 20,
+            points: 1000
+          },
+          {
+            text: "Simplify: (2x³y²) × (3x²y⁴)",
+            options: ["5x⁵y⁶", "6x⁶y⁸", "6x⁵y⁶", "5x⁶y⁸"],
+            correctIndex: 2,
+            timeLimit: 15,
+            points: 1000
+          }
+        ]
+      },
+      agriculture: {
+        title: "Agriculture & Soil Science Live Check",
+        subject: "Agriculture",
+        questions: [
+          {
+            text: "Which practice is most effective for controlling soil erosion on steep cultivated slopes?",
+            options: ["Monocropping", "Constructing bench terraces", "Overgrazing", "Burning crop residues"],
+            correctIndex: 1,
+            timeLimit: 15,
+            points: 1000
+          },
+          {
+            text: "Which macro-nutrient is primarily responsible for vigorous vegetative leaf growth in crops?",
+            options: ["Phosphorus", "Potassium", "Nitrogen", "Calcium"],
+            correctIndex: 2,
+            timeLimit: 15,
+            points: 1000
+          },
+          {
+            text: "How does a farmer raise the pH of strongly acidic agricultural soil?",
+            options: ["Applying agricultural lime (CaCO₃)", "Adding ammonium sulphate", "Flood irrigation", "Deep ploughing only"],
+            correctIndex: 0,
+            timeLimit: 20,
+            points: 1000
+          }
+        ]
+      },
+      pretech: {
+        title: "Pre-Technical Studies: Safety & Drawing",
+        subject: "Pre-Technical Studies",
+        questions: [
+          {
+            text: "Which class of fire extinguisher is safest to use on live electrical equipment fires?",
+            options: ["Water (Red label)", "Foam (Cream label)", "Carbon Dioxide CO₂ (Black label)", "Wet Chemical (Yellow label)"],
+            correctIndex: 2,
+            timeLimit: 15,
+            points: 1000
+          },
+          {
+            text: "In technical drawing, what type of line is used to represent hidden details/edges?",
+            options: ["Continuous thick line", "Short dashed thin line", "Chain thin line", "Freehand wavy line"],
+            correctIndex: 1,
+            timeLimit: 15,
+            points: 1000
+          },
+          {
+            text: "Which measuring tool is best suited for checking internal and external diameters to 0.02 mm accuracy?",
+            options: ["Steel rule", "Try square", "Vernier calipers", "Spirit level"],
+            correctIndex: 2,
+            timeLimit: 15,
+            points: 1000
+          }
+        ]
+      }
+    };
+
+    // ==================== 2. APP STATE ====================
+    let state = {
+      role: null, // 'host' | 'player'
+      roomPin: null,
+      roomData: null,
+      players: [], // Array of { id, name, score, answers: { [qIdx]: { choice, correct, points, timeTaken } } }
+      playerId: null,
+      playerName: null,
+      unsubRoom: null,
+      unsubPlayers: null,
+      timerInterval: null,
+      lastCreatedPin: null,
+      builderQuestions: []
+    };
+
+    // ==================== 3. UI HELPERS (NO ALERT/CONFIRM) ====================
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const colors = {
+        info: 'bg-board-800 border-teal-400/40 text-white',
+        success: 'bg-emerald-600 border-emerald-300 text-white',
+        error: 'bg-rose-600 border-rose-300 text-white',
+        warning: 'bg-amber-500 border-amber-200 text-board-950'
+      };
+      const icons = {
+        info: 'fa-circle-info',
+        success: 'fa-circle-check',
+        error: 'fa-circle-exclamation',
+        warning: 'fa-triangle-exclamation'
+      };
+      toast.className = `pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-2xl border shadow-xl text-sm font-semibold transition-all duration-300 ${colors[type] || colors.info}`;
+      toast.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i><span>${message}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-8px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3400);
+    }
+
+    function showConfirmModal(title, message, onConfirm) {
+      const modal = document.getElementById('confirm-modal');
+      document.getElementById('confirm-title').textContent = title;
+      document.getElementById('confirm-message').textContent = message;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+
+      const cleanup = () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      };
+
+      document.getElementById('confirm-cancel').onclick = cleanup;
+      document.getElementById('confirm-ok').onclick = () => {
+        cleanup();
+        onConfirm();
+      };
+    }
+
+    window.appNav = function(viewName) {
+      const views = ['view-landing', 'view-builder', 'view-teacher-host', 'view-learner-player'];
+      views.forEach(v => document.getElementById(v).classList.add('hidden'));
+      document.getElementById(`view-${viewName}`).classList.remove('hidden');
+
+      const homeBtn = document.getElementById('home-btn');
+      if (viewName === 'landing') {
+        homeBtn.classList.add('hidden');
+        if (state.lastCreatedPin) {
+          document.getElementById('quick-fill-pin-btn').classList.remove('hidden');
+        }
+      } else {
+        homeBtn.classList.remove('hidden');
+      }
+    };
+
+    window.fillDemoPin = function() {
+      if (state.lastCreatedPin) {
+        document.getElementById('join-pin-input').value = state.lastCreatedPin;
+        document.getElementById('join-name-input').focus();
+      }
+    };
+
+    // ==================== 4. AUTHENTICATION SETUP ====================
+    async function initFirebaseAndAuth() {
+      if (!firebaseConfig) {
+        document.getElementById('sync-dot').className = 'w-2 h-2 rounded-full bg-rose-500';
+        document.getElementById('sync-text').textContent = 'Config Missing';
+        return;
+      }
+
+      try {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+
+        // Rule 3: Sign in with custom token first, fallback to anonymous
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+
+        onAuthStateChanged(auth, (user) => {
+          currentUser = user;
+          if (user) {
+            document.getElementById('sync-dot').className = 'w-2 h-2 rounded-full bg-emerald-400';
+            document.getElementById('sync-text').textContent = 'Live Cloud Ready';
+            if (!user.isAnonymous && user.displayName) {
+              document.getElementById('auth-user-label').textContent = user.displayName.split(' ')[0];
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Auth initialization error:", err);
+        document.getElementById('sync-dot').className = 'w-2 h-2 rounded-full bg-rose-500';
+        document.getElementById('sync-text').textContent = 'Connection Error';
+        showToast("Could not connect to live sync service.", "error");
+      }
+    }
+
+    window.signInWithGoogle = async function() {
+      if (!auth) return;
+      try {
+        const provider = new GoogleAuthProvider();
+        const res = await signInWithPopup(auth, provider);
+        if (res.user) {
+          showToast(`Signed in as ${res.user.displayName || 'Teacher'}`, 'success');
+        }
+      } catch (err) {
+        showToast("Google sign-in unavailable in preview; guest host active.", "info");
+      }
+    };
+
+    // ==================== 5. QUIZ BUILDER LOGIC ====================
+    window.openQuizBuilder = function() {
+      state.builderQuestions = [
+        {
+          text: "",
+          options: ["", "", "", ""],
+          correctIndex: 0,
+          timeLimit: 20,
+          points: 1000
+        }
+      ];
+      renderBuilderQuestions();
+      window.appNav('builder');
+    };
+
+    window.addBuilderQuestion = function() {
+      state.builderQuestions.push({
+        text: "",
+        options: ["", "", "", ""],
+        correctIndex: 0,
+        timeLimit: 20,
+        points: 1000
+      });
+      renderBuilderQuestions();
+    };
+
+    window.removeBuilderQuestion = function(idx) {
+      if (state.builderQuestions.length <= 1) {
+        showToast("A quiz needs at least 1 question.", "warning");
+        return;
+      }
+      state.builderQuestions.splice(idx, 1);
+      renderBuilderQuestions();
+    };
+
+    function renderBuilderQuestions() {
+      const container = document.getElementById('builder-questions-list');
+      const letters = ['A', 'B', 'C', 'D'];
+      container.innerHTML = state.builderQuestions.map((q, qIdx) => `
+        <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+          <div class="flex items-center justify-between">
+            <span class="px-3 py-1 rounded-lg bg-board-800 text-white font-display font-bold text-xs">Question ${qIdx + 1}</span>
+            <div class="flex items-center gap-3">
+              <label class="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+                <i class="fa-regular fa-clock"></i>
+                <select onchange="window.updateBuilderField(${qIdx}, 'timeLimit', Number(this.value))" class="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800">
+                  <option value="10" ${q.timeLimit === 10 ? 'selected' : ''}>10s</option>
+                  <option value="15" ${q.timeLimit === 15 ? 'selected' : ''}>15s</option>
+                  <option value="20" ${q.timeLimit === 20 ? 'selected' : ''}>20s</option>
+                  <option value="30" ${q.timeLimit === 30 ? 'selected' : ''}>30s</option>
+                  <option value="45" ${q.timeLimit === 45 ? 'selected' : ''}>45s</option>
+                </select>
+              </label>
+              <button onclick="window.removeBuilderQuestion(${qIdx})" class="text-slate-400 hover:text-rose-600 transition p-1" title="Remove Question">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
+          </div>
+
+          <input
+            type="text"
+            value="${escapeHtml(q.text)}"
+            oninput="window.updateBuilderField(${qIdx}, 'text', this.value)"
+            placeholder="Type your question here (e.g., Calculate the gradient of y = 3x - 4)..."
+            class="w-full px-4 py-3 rounded-xl bg-white border border-slate-300 focus:border-teal-600 focus:outline-none font-semibold text-slate-900"
+          />
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            ${letters.map((letter, optIdx) => `
+              <div class="flex items-center gap-2 bg-white p-2 rounded-xl border ${q.correctIndex === optIdx ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-slate-200'}">
+                <button
+                  type="button"
+                  onclick="window.updateBuilderField(${qIdx}, 'correctIndex', ${optIdx})"
+                  title="Mark Option ${letter} as Correct Answer"
+                  class="w-8 h-8 rounded-lg font-display font-extrabold text-xs flex items-center justify-center shrink-0 transition ${q.correctIndex === optIdx ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
+                >
+                  ${q.correctIndex === optIdx ? '<i class="fa-solid fa-check"></i>' : letter}
+                </button>
+                <input
+                  type="text"
+                  value="${escapeHtml(q.options[optIdx])}"
+                  oninput="window.updateBuilderOption(${qIdx}, ${optIdx}, this.value)"
+                  placeholder="Option ${letter}"
+                  class="w-full text-sm font-medium text-slate-800 focus:outline-none"
+                />
+              </div>
+            `).join('')}
+          </div>
+          <p class="text-[11px] text-slate-500">Click the letter badge (A, B, C, or D) on the left of an option to mark the correct answer key.</p>
+        </div>
+      `).join('');
+    }
+
+    window.updateBuilderField = function(qIdx, field, val) {
+      state.builderQuestions[qIdx][field] = val;
+      if (field === 'correctIndex') renderBuilderQuestions();
+    };
+
+    window.updateBuilderOption = function(qIdx, optIdx, val) {
+      state.builderQuestions[qIdx].options[optIdx] = val;
+    };
+
+    window.saveAndLaunchCustomQuiz = async function() {
+      const title = document.getElementById('builder-title').value.trim() || "Custom Classroom Challenge";
+      const subject = document.getElementById('builder-subject').value;
+
+      for (let i = 0; i < state.builderQuestions.length; i++) {
+        const q = state.builderQuestions[i];
+        if (!q.text.trim()) {
+          showToast(`Please enter text for Question ${i + 1}.`, "warning");
+          return;
+        }
+        if (q.options.some(o => !o.trim())) {
+          showToast(`Please fill in all 4 options (A–D) for Question ${i + 1}.`, "warning");
+          return;
+        }
+      }
+
+      await createLiveRoom({
+        title,
+        subject,
+        questions: state.builderQuestions
+      });
+    };
+
+    // ==================== 6. ROOM CREATION & FIRESTORE SYNC ====================
+    function generateRoomPin() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let pin = '';
+      for (let i = 0; i < 6; i++) {
+        pin += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return pin;
+    }
+
+    window.launchPresetQuiz = async function(key) {
+      const preset = PRESET_QUIZZES[key];
+      if (!preset) return;
+      await createLiveRoom(preset);
+    };
+
+    async function createLiveRoom(quizObj) {
+      if (!currentUser || !db) {
+        showToast("Waiting for live connection...", "warning");
+        return;
+      }
+
+      const pin = generateRoomPin();
+      // Rule 1 Strict Path: /artifacts/{appId}/public/data/rooms/{pin}
+      const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', pin);
+
+      const roomPayload = {
+        pin,
+        hostId: currentUser.uid,
+        title: quizObj.title,
+        subject: quizObj.subject,
+        questions: quizObj.questions,
+        status: 'lobby', // 'lobby' | 'question' | 'revealed' | 'finished'
+        currentQuestionIndex: -1,
+        questionStartedAt: null,
+        createdAt: serverTimestamp()
+      };
+
+      try {
+        await setDoc(roomRef, roomPayload);
+        state.role = 'host';
+        state.roomPin = pin;
+        state.lastCreatedPin = pin;
+        subscribeToRoom(pin);
+        window.appNav('teacher-host');
+        showToast(`Live Room ${pin} created! Share PIN with learners.`, 'success');
+      } catch (err) {
+        console.error("Error creating room:", err);
+        showToast("Failed to create room. Check permissions.", "error");
+      }
+    }
+
+    function cleanupListeners() {
+      if (state.unsubRoom) { state.unsubRoom(); state.unsubRoom = null; }
+      if (state.unsubPlayers) { state.unsubPlayers(); state.unsubPlayers = null; }
+      if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
+    }
+
+    function subscribeToRoom(pin) {
+      cleanupListeners();
+
+      const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', pin);
+      const playersColRef = collection(db, 'artifacts', appId, 'public', 'data', `room_${pin}_players`);
+
+      // Listen to Room State
+      state.unsubRoom = onSnapshot(roomRef, (snap) => {
+        if (!snap.exists()) {
+          showToast("This session has ended or does not exist.", "warning");
+          window.appNav('landing');
+          return;
+        }
+        state.roomData = snap.data();
+        if (state.role === 'host') {
+          renderTeacherDashboard();
+        } else if (state.role === 'player') {
+          renderLearnerScreen();
+        }
+      }, (err) => {
+        console.error("Room snapshot error:", err);
+      });
+
+      // Listen to Players & Answers (Rule 2: No orderBy/where; sort in JS memory)
+      state.unsubPlayers = onSnapshot(playersColRef, (querySnap) => {
+        const list = [];
+        querySnap.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        // Sort descending by score
+        list.sort((a, b) => (b.score || 0) - (a.score || 0));
+        state.players = list;
+
+        if (state.role === 'host') {
+          renderTeacherDashboard();
+        } else if (state.role === 'player') {
+          renderLearnerScreen();
+        }
+      }, (err) => {
+        console.error("Players snapshot error:", err);
+      });
+    }
+
+    // ==================== 7. TEACHER HOST CONTROLS & RENDERING ====================
+    window.copyRoomPin = function() {
+      if (!state.roomPin) return;
+      const temp = document.createElement('input');
+      temp.value = state.roomPin;
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand('copy');
+      document.body.removeChild(temp);
+      showToast(`Room PIN ${state.roomPin} copied!`, 'success');
+    };
+
+    window.teacherPushNext = async function() {
+      if (!state.roomData || !state.roomPin || !currentUser) return;
+      const nextIdx = (state.roomData.currentQuestionIndex ?? -1) + 1;
+      const totalQs = state.roomData.questions.length;
+
+      const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomPin);
+
+      if (nextIdx >= totalQs) {
+        await updateDoc(roomRef, {
+          status: 'finished'
+        });
+        showToast("Session finished! Final leaderboard published.", "success");
+        return;
+      }
+
+      await updateDoc(roomRef, {
+        status: 'question',
+        currentQuestionIndex: nextIdx,
+        questionStartedAt: Date.now()
+      });
+      showToast(`Pushed Question ${nextIdx + 1} to all learners!`, "info");
+    };
+
+    window.teacherRevealAnswer = async function() {
+      if (!state.roomData || !state.roomPin || !currentUser) return;
+      const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomPin);
+      await updateDoc(roomRef, {
+        status: 'revealed'
+      });
+    };
+
+    window.confirmEndSession = function() {
+      showConfirmModal(
+        "End Live Session?",
+        "This will close the live quiz for all connected learners. Make sure you've exported your CSV marksheet if needed.",
+        async () => {
+          if (state.roomPin && currentUser) {
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomPin);
+            await updateDoc(roomRef, { status: 'finished' });
+          }
+          cleanupListeners();
+          window.appNav('landing');
+        }
+      );
+    };
+
+    function renderTeacherDashboard() {
+      const room = state.roomData;
+      if (!room) return;
+
+      const players = state.players;
+      const qIdx = room.currentQuestionIndex;
+      const questions = room.questions || [];
+      const totalQs = questions.length;
+
+      // Header Info
+      document.getElementById('host-room-pin').textContent = room.pin;
+      document.getElementById('lobby-inline-pin').textContent = room.pin;
+      document.getElementById('host-quiz-title').textContent = room.title;
+      document.getElementById('host-subject-badge').textContent = room.subject;
+      document.getElementById('host-joined-count').textContent = players.length;
+
+      // Status Pill & Action Buttons
+      const statusPill = document.getElementById('host-status-pill');
+      const pushBtn = document.getElementById('host-push-btn');
+      const pushLabel = document.getElementById('host-push-label');
+      const revealBtn = document.getElementById('host-reveal-btn');
+
+      const stageLobby = document.getElementById('host-stage-lobby');
+      const stageQuestion = document.getElementById('host-stage-question');
+      const stageFinished = document.getElementById('host-stage-finished');
+
+      stageLobby.classList.add('hidden');
+      stageQuestion.classList.add('hidden');
+      stageFinished.classList.add('hidden');
+      revealBtn.classList.add('hidden');
+      pushBtn.classList.remove('hidden');
+
+      if (room.status === 'lobby') {
+        statusPill.textContent = 'Lobby Open';
+        statusPill.className = 'px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-xs font-bold';
+        pushLabel.textContent = `Push Question 1 to Learners`;
+        stageLobby.classList.remove('hidden');
+        document.getElementById('lobby-total-qs').textContent = totalQs;
+        document.getElementById('lobby-q1-preview').textContent = questions[0]?.text || '';
+      } else if (room.status === 'question' || room.status === 'revealed') {
+        const activeQ = questions[qIdx];
+        stageQuestion.classList.remove('hidden');
+
+        if (room.status === 'question') {
+          statusPill.textContent = `Live: Q${qIdx + 1}`;
+          statusPill.className = 'px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 text-xs font-bold';
+          revealBtn.classList.remove('hidden');
+          pushLabel.textContent = qIdx + 1 < totalQs ? `Skip to Question ${qIdx + 2}` : 'Finish Quiz';
+        } else {
+          statusPill.textContent = `Answer Revealed`;
+          statusPill.className = 'px-2.5 py-0.5 rounded-full bg-teal-400/20 text-teal-200 text-xs font-bold';
+          pushLabel.textContent = qIdx + 1 < totalQs ? `Push Question ${qIdx + 2}` : 'Show Final Podium';
+        }
+
+        document.getElementById('host-q-badge').textContent = `Question ${qIdx + 1} / ${totalQs}`;
+        document.getElementById('host-q-points').textContent = `${activeQ.points || 1000} pts`;
+        document.getElementById('host-question-text').textContent = activeQ.text;
+
+        // Start/Sync Host Countdown
+        startHostCountdown(room, activeQ);
+
+        // Calculate option counts & response rate
+        const counts = [0, 0, 0, 0];
+        let respondedCount = 0;
+        players.forEach(p => {
+          const ans = p.answers && p.answers[qIdx];
+          if (ans !== undefined && ans !== null) {
+            respondedCount++;
+            if (ans.choice >= 0 && ans.choice <= 3) {
+              counts[ans.choice]++;
+            }
+          }
+        });
+
+        document.getElementById('host-response-counter').textContent = `${respondedCount} / ${players.length}`;
+
+        // Render A, B, C, D Live Analytics Bars
+        const optionStyles = [
+          { letter: 'A', bg: 'bg-sky-50', border: 'border-sky-200', badge: 'bg-sky-600 text-white', bar: 'bg-sky-500' },
+          { letter: 'B', bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-500 text-white', bar: 'bg-amber-500' },
+          { letter: 'C', bg: 'bg-purple-50', border: 'border-purple-200', badge: 'bg-purple-600 text-white', bar: 'bg-purple-500' },
+          { letter: 'D', bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-600 text-white', bar: 'bg-emerald-500' }
+        ];
+
+        const analyticsEl = document.getElementById('host-options-analytics');
+        analyticsEl.innerHTML = activeQ.options.map((optText, idx) => {
+          const st = optionStyles[idx];
+          const count = counts[idx];
+          const pct = respondedCount > 0 ? Math.round((count / respondedCount) * 100) : 0;
+          const isCorrect = idx === activeQ.correctIndex;
+          const highlightCorrect = (room.status === 'revealed' && isCorrect)
+            ? 'ring-2 ring-emerald-500 bg-emerald-50/90'
+            : '';
+
+          return `
+            <div class="p-4 rounded-2xl border ${st.border} ${st.bg} ${highlightCorrect} transition-all">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="flex items-center gap-2.5">
+                  <span class="w-7 h-7 rounded-lg ${st.badge} font-display font-extrabold text-xs flex items-center justify-center shrink-0">${st.letter}</span>
+                  <span class="font-bold text-sm text-slate-900">${escapeHtml(optText)}</span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  ${isCorrect ? '<span class="text-xs font-extrabold text-emerald-700 bg-emerald-200/70 px-2 py-0.5 rounded-md"><i class="fa-solid fa-check"></i> Key</span>' : ''}
+                  <span class="font-display font-extrabold text-sm text-slate-800">${count} <span class="text-xs font-normal text-slate-500">(${pct}%)</span></span>
+                </div>
+              </div>
+              <div class="w-full h-2.5 bg-white rounded-full overflow-hidden border border-slate-200/70">
+                <div class="h-full ${st.bar} transition-all duration-300" style="width: ${pct}%"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } else if (room.status === 'finished') {
+        statusPill.textContent = 'Completed';
+        statusPill.className = 'px-2.5 py-0.5 rounded-full bg-purple-400/20 text-purple-200 text-xs font-bold';
+        pushBtn.classList.add('hidden');
+        stageFinished.classList.remove('hidden');
+
+        const top3 = players.slice(0, 3);
+        const medals = [
+          { rank: '1st Place', bg: 'bg-amber-50 border-amber-300', icon: 'text-amber-500 fa-crown' },
+          { rank: '2nd Place', bg: 'bg-slate-50 border-slate-300', icon: 'text-slate-400 fa-medal' },
+          { rank: '3rd Place', bg: 'bg-orange-50 border-orange-300', icon: 'text-orange-500 fa-award' }
+        ];
+        document.getElementById('host-podium-cards').innerHTML = top3.length
+          ? top3.map((p, i) => `
+              <div class="p-4 rounded-2xl border-2 ${medals[i].bg} text-center">
+                <i class="fa-solid ${medals[i].icon} text-2xl mb-1"></i>
+                <p class="text-[11px] font-extrabold uppercase text-slate-500">${medals[i].rank}</p>
+                <p class="font-display font-extrabold text-base text-slate-900 truncate mt-0.5">${escapeHtml(p.name)}</p>
+                <p class="font-display font-extrabold text-lg text-teal-700 mt-1">${p.score || 0} pts</p>
+              </div>
+            `).join('')
+          : '<p class="col-span-3 text-slate-400 text-sm">No learners recorded scores in this session.</p>';
+      }
+
+      // Render Individual Learner Activity Feed
+      const responsesList = document.getElementById('host-learner-responses-list');
+      const letters = ['A', 'B', 'C', 'D'];
+      if (players.length === 0) {
+        responsesList.innerHTML = `<p class="text-sm text-slate-400 col-span-full py-4 text-center">Waiting for learners to join with PIN <strong>${room.pin}</strong>...</p>`;
+        document.getElementById('host-accuracy-pill').textContent = `Class Accuracy: --%`;
+      } else {
+        let totalAnsweredAll = 0;
+        let totalCorrectAll = 0;
+
+        responsesList.innerHTML = players.map(p => {
+          // Tally overall accuracy
+          if (p.answers) {
+            Object.values(p.answers).forEach(a => {
+              totalAnsweredAll++;
+              if (a.correct) totalCorrectAll++;
+            });
+          }
+
+          let badgeHtml = `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-500">In Lobby</span>`;
+          if (qIdx >= 0) {
+            const ans = p.answers && p.answers[qIdx];
+            if (ans) {
+              badgeHtml = ans.correct
+                ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check mr-1"></i>${letters[ans.choice]} (+${ans.points})</span>`
+                : `<span class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-rose-100 text-rose-700"><i class="fa-solid fa-xmark mr-1"></i>${letters[ans.choice]}</span>`;
+            } else {
+              badgeHtml = `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 animate-pulse">Thinking...</span>`;
+            }
+          }
+
+          return `
+            <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+              <div class="flex items-center gap-2 min-w-0">
+                <div class="w-7 h-7 rounded-lg bg-board-800 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                  ${escapeHtml(p.name.charAt(0).toUpperCase())}
+                </div>
+                <span class="font-semibold text-xs text-slate-800 truncate">${escapeHtml(p.name)}</span>
+              </div>
+              ${badgeHtml}
+            </div>
+          `;
+        }).join('');
+
+        const acc = totalAnsweredAll > 0 ? Math.round((totalCorrectAll / totalAnsweredAll) * 100) : 0;
+        document.getElementById('host-accuracy-pill').textContent = `Class Accuracy: ${acc}%`;
+      }
+
+      // Render Live Ranked Leaderboard
+      const lbEl = document.getElementById('host-leaderboard-list');
+      if (players.length === 0) {
+        lbEl.innerHTML = `<div class="text-center py-8 text-slate-400 text-xs">No learners connected yet.</div>`;
+      } else {
+        lbEl.innerHTML = players.map((p, index) => {
+          const rank = index + 1;
+          const rankBadge = rank === 1
+            ? 'bg-amber-400 text-board-950'
+            : rank === 2
+              ? 'bg-slate-300 text-board-950'
+              : rank === 3
+                ? 'bg-orange-400 text-board-950'
+                : 'bg-white/10 text-slate-300';
+
+          return `
+            <div class="flex items-center justify-between gap-3 p-3 rounded-2xl bg-white/5 border border-white/10">
+              <div class="flex items-center gap-3 min-w-0">
+                <span class="w-7 h-7 rounded-lg ${rankBadge} font-display font-extrabold text-xs flex items-center justify-center shrink-0">
+                  #${rank}
+                </span>
+                <span class="font-bold text-sm text-white truncate">${escapeHtml(p.name)}</span>
+              </div>
+              <span class="font-display font-extrabold text-sm text-emerald-400 shrink-0">${p.score || 0}</span>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function startHostCountdown(room, activeQ) {
+      if (state.timerInterval) clearInterval(state.timerInterval);
+      const timerEl = document.getElementById('host-timer-display');
+
+      if (room.status !== 'question' || !room.questionStartedAt) {
+        timerEl.textContent = '0';
+        return;
+      }
+
+      const updateTick = () => {
+        const elapsed = Math.floor((Date.now() - room.questionStartedAt) / 1000);
+        const remaining = Math.max(0, (activeQ.timeLimit || 20) - elapsed);
+        timerEl.textContent = remaining;
+
+        // Auto-reveal if time reaches 0
+        if (remaining === 0 && state.roomData?.status === 'question') {
+          clearInterval(state.timerInterval);
+          window.teacherRevealAnswer();
+        }
+      };
+
+      updateTick();
+      state.timerInterval = setInterval(updateTick, 500);
+    }
+
+    // ==================== 8. CSV EXPORT FOR SCHOOL RECORDS ====================
+    window.exportResultsCSV = function() {
+      if (!state.roomData) return;
+      const room = state.roomData;
+      const questions = room.questions || [];
+      const letters = ['A', 'B', 'C', 'D'];
+
+      const headers = ['Rank', 'Learner Name', 'Total Score', 'Correct Count', 'Accuracy (%)'];
+      questions.forEach((_, idx) => {
+        headers.push(`Q${idx + 1} Choice`);
+        headers.push(`Q${idx + 1} Result`);
+      });
+
+      const rows = [headers.join(',')];
+
+      state.players.forEach((p, idx) => {
+        let correctCount = 0;
+        const qCols = [];
+        questions.forEach((_, qIdx) => {
+          const ans = p.answers && p.answers[qIdx];
+          if (ans) {
+            if (ans.correct) correctCount++;
+            qCols.push(letters[ans.choice] || '-');
+            qCols.push(ans.correct ? 'Correct' : 'Wrong');
+          } else {
+            qCols.push('No Answer');
+            qCols.push('-');
+          }
+        });
+
+        const acc = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
+        const safeName = `"${(p.name || 'Learner').replace(/"/g, '""')}"`;
+        rows.push([idx + 1, safeName, p.score || 0, correctCount, `${acc}%`, ...qCols].join(','));
+      });
+
+      const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Qriosity_${room.pin}_Marksheet.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast("Marksheet exported as CSV!", "success");
+    };
+
+    // ==================== 9. LEARNER JOIN & LIVE INTERACTION ====================
+    window.handleLearnerJoin = async function(e) {
+      e.preventDefault();
+      if (!currentUser || !db) {
+        showToast("Still connecting to cloud... try again in a second.", "warning");
+        return;
+      }
+
+      const pin = document.getElementById('join-pin-input').value.trim().toUpperCase();
+      const name = document.getElementById('join-name-input').value.trim();
+
+      if (pin.length !== 6 || !name) {
+        showToast("Please enter a valid 6-character PIN and your name.", "warning");
+        return;
+      }
+
+      try {
+        const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', pin);
+        const roomSnap = await getDoc(roomRef);
+
+        if (!roomSnap.exists()) {
+          showToast(`Room PIN "${pin}" not found. Check with your teacher.`, "error");
+          return;
+        }
+
+        const roomData = roomSnap.data();
+        if (roomData.status === 'finished') {
+          showToast("That session has already ended.", "warning");
+          return;
+        }
+
+        const playerId = `${currentUser.uid}_${name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10)}`;
+        const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `room_${pin}_players`, playerId);
+
+        const existingPlayer = await getDoc(playerRef);
+        if (!existingPlayer.exists()) {
+          await setDoc(playerRef, {
+            name,
+            score: 0,
+            answers: {},
+            joinedAt: serverTimestamp()
+          });
+        }
+
+        state.role = 'player';
+        state.roomPin = pin;
+        state.playerId = playerId;
+        state.playerName = name;
+
+        subscribeToRoom(pin);
+        window.appNav('learner-player');
+        showToast(`Joined ${roomData.title}!`, "success");
+      } catch (err) {
+        console.error("Join room error:", err);
+        showToast("Unable to join room. Please try again.", "error");
+      }
+    };
+
+    let lastRenderedPlayerQKey = null;
+
+    function renderLearnerScreen() {
+      const room = state.roomData;
+      if (!room) return;
+
+      const meIndex = state.players.findIndex(p => p.id === state.playerId);
+      const me = meIndex >= 0 ? state.players[meIndex] : { name: state.playerName, score: 0, answers: {} };
+      const myRank = meIndex >= 0 ? meIndex + 1 : '-';
+
+      // Top player header
+      document.getElementById('player-avatar').textContent = (me.name || 'L').charAt(0).toUpperCase();
+      document.getElementById('player-name-display').textContent = me.name;
+      document.getElementById('player-pin-display').textContent = room.pin;
+      document.getElementById('player-score-display').textContent = me.score || 0;
+      document.getElementById('player-rank-display').textContent = `#${myRank}`;
+      document.getElementById('player-quiz-title').textContent = room.title;
+
+      const stWaiting = document.getElementById('player-state-waiting');
+      const stQuestion = document.getElementById('player-state-question');
+      const stFeedback = document.getElementById('player-state-feedback');
+      const stFinished = document.getElementById('player-state-finished');
+
+      stWaiting.classList.add('hidden');
+      stQuestion.classList.add('hidden');
+      stFeedback.classList.add('hidden');
+      stFinished.classList.add('hidden');
+
+      if (room.status === 'lobby') {
+        stWaiting.classList.remove('hidden');
+        lastRenderedPlayerQKey = null;
+      } else if (room.status === 'finished') {
+        stFinished.classList.remove('hidden');
+        document.getElementById('final-player-score').textContent = `${me.score || 0} pts`;
+        document.getElementById('final-player-rank').textContent = `#${myRank} of ${state.players.length}`;
+      } else if (room.status === 'question' || room.status === 'revealed') {
+        const qIdx = room.currentQuestionIndex;
+        const activeQ = room.questions[qIdx];
+        const myAns = me.answers && me.answers[qIdx];
+
+        if (myAns || room.status === 'revealed') {
+          // Show Instant Auto-Graded Feedback Screen
+          stFeedback.classList.remove('hidden');
+          const iconBox = document.getElementById('feedback-icon-box');
+          const heading = document.getElementById('feedback-heading');
+          const subtext = document.getElementById('feedback-subtext');
+          const ptsEl = document.getElementById('feedback-points');
+          const rankEl = document.getElementById('feedback-rank');
+
+          const letters = ['A', 'B', 'C', 'D'];
+          const correctLetter = letters[activeQ.correctIndex];
+          const correctText = activeQ.options[activeQ.correctIndex];
+
+          if (myAns && myAns.correct) {
+            iconBox.className = 'w-20 h-20 rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-4xl mx-auto';
+            iconBox.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+            heading.textContent = 'Spot On! Correct Answer';
+            subtext.textContent = room.status === 'revealed'
+              ? `Answer: ${correctLetter}. ${correctText}`
+              : 'Auto-marked! Waiting for your teacher to push the next question...';
+            ptsEl.textContent = `+${myAns.points}`;
+            ptsEl.className = 'font-display font-extrabold text-xl text-emerald-600';
+          } else if (myAns && !myAns.correct) {
+            iconBox.className = 'w-20 h-20 rounded-3xl bg-rose-100 text-rose-600 flex items-center justify-center text-4xl mx-auto';
+            iconBox.innerHTML = '<i class="fa-solid fa-circle-xmark"></i>';
+            heading.textContent = 'Not Quite!';
+            subtext.textContent = room.status === 'revealed'
+              ? `Correct answer was ${correctLetter}: ${correctText}`
+              : 'Response recorded! Stay ready for the next question...';
+            ptsEl.textContent = '+0';
+            ptsEl.className = 'font-display font-extrabold text-xl text-rose-600';
+          } else {
+            iconBox.className = 'w-20 h-20 rounded-3xl bg-amber-100 text-amber-600 flex items-center justify-center text-4xl mx-auto';
+            iconBox.innerHTML = '<i class="fa-solid fa-hourglass-end"></i>';
+            heading.textContent = "Time's Up!";
+            subtext.textContent = `Correct answer was ${correctLetter}: ${correctText}`;
+            ptsEl.textContent = '+0';
+            ptsEl.className = 'font-display font-extrabold text-xl text-slate-500';
+          }
+
+          rankEl.textContent = `#${myRank}`;
+        } else {
+          // Render Interactive Question Choices
+          stQuestion.classList.remove('hidden');
+          const renderKey = `${room.pin}_${qIdx}_${room.questionStartedAt}`;
+
+          if (lastRenderedPlayerQKey !== renderKey) {
+            lastRenderedPlayerQKey = renderKey;
+            document.getElementById('player-q-number').textContent = `Question ${qIdx + 1} of ${room.questions.length}`;
+            document.getElementById('player-question-text').textContent = activeQ.text;
+
+            const btnThemes = [
+              { letter: 'A', bg: 'bg-sky-600 hover:bg-sky-500 text-white shadow-sky-600/25' },
+              { letter: 'B', bg: 'bg-amber-500 hover:bg-amber-400 text-board-950 shadow-amber-500/25' },
+              { letter: 'C', bg: 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/25' },
+              { letter: 'D', bg: 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25' }
+            ];
+
+            const grid = document.getElementById('player-options-grid');
+            grid.innerHTML = activeQ.options.map((optText, idx) => `
+              <button
+                type="button"
+                onclick="window.submitLearnerAnswer(${idx})"
+                class="option-card p-4 sm:p-5 rounded-2xl ${btnThemes[idx].bg} shadow-lg text-left flex items-center gap-3.5"
+              >
+                <span class="w-10 h-10 rounded-xl bg-black/15 font-display font-extrabold text-lg flex items-center justify-center shrink-0">
+                  ${btnThemes[idx].letter}
+                </span>
+                <span class="font-bold text-base leading-snug">${escapeHtml(optText)}</span>
+              </button>
+            `).join('');
+
+            startPlayerCountdown(room, activeQ);
+          }
+        }
+      }
+    }
+
+    function startPlayerCountdown(room, activeQ) {
+      if (state.timerInterval) clearInterval(state.timerInterval);
+      const timerText = document.getElementById('player-timer');
+      const timerBar = document.getElementById('player-timer-bar');
+      const totalLimit = activeQ.timeLimit || 20;
+
+      const tick = () => {
+        const elapsed = (Date.now() - room.questionStartedAt) / 1000;
+        const remaining = Math.max(0, totalLimit - elapsed);
+        timerText.textContent = `${Math.ceil(remaining)}s`;
+        const pct = Math.max(0, Math.min(100, (remaining / totalLimit) * 100));
+        timerBar.style.width = `${pct}%`;
+
+        if (remaining <= 0) {
+          clearInterval(state.timerInterval);
+        }
+      };
+
+      tick();
+      state.timerInterval = setInterval(tick, 250);
+    }
+
+    window.submitLearnerAnswer = async function(choiceIndex) {
+      if (!state.roomData || !state.roomPin || !state.playerId || !currentUser) return;
+
+      const room = state.roomData;
+      const qIdx = room.currentQuestionIndex;
+      const activeQ = room.questions[qIdx];
+      if (!activeQ || room.status !== 'question') return;
+
+      // Disable buttons immediately to prevent double-submit
+      const buttons = document.querySelectorAll('#player-options-grid button');
+      buttons.forEach(b => b.disabled = true);
+
+      // Automatic Marking & Speed-Weighted Points Calculation
+      const isCorrect = choiceIndex === activeQ.correctIndex;
+      const maxPoints = activeQ.points || 1000;
+      const timeLimit = activeQ.timeLimit || 20;
+      const elapsedSec = Math.max(0, (Date.now() - (room.questionStartedAt || Date.now())) / 1000);
+      const timeRatio = Math.max(0, Math.min(1, 1 - (elapsedSec / timeLimit) * 0.5));
+      const earnedPoints = isCorrect ? Math.round(maxPoints * timeRatio) : 0;
+
+      const me = state.players.find(p => p.id === state.playerId);
+      const currentScore = me?.score || 0;
+      const updatedAnswers = { ...(me?.answers || {}) };
+
+      if (updatedAnswers[qIdx]) return; // Already answered
+
+      updatedAnswers[qIdx] = {
+        choice: choiceIndex,
+        correct: isCorrect,
+        points: earnedPoints,
+        timeTaken: Number(elapsedSec.toFixed(1))
+      };
+
+      try {
+        const playerRef = doc(db, 'artifacts', appId, 'public', 'data', `room_${state.roomPin}_players`, state.playerId);
+        await updateDoc(playerRef, {
+          score: currentScore + earnedPoints,
+          answers: updatedAnswers
+        });
+      } catch (err) {
+        console.error("Failed to submit answer:", err);
+        showToast("Could not submit answer. Check connection.", "error");
+        buttons.forEach(b => b.disabled = false);
+      }
+    };
+
+    function escapeHtml(str) {
+      if (typeof str !== 'string') return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Boot App
+    window.addEventListener('DOMContentLoaded', () => {
+      initFirebaseAndAuth();
+    });
+  </script>
+</body>
+</html>
